@@ -13,10 +13,12 @@ namespace backendTest.Controllers
     public class FirebaseController : ControllerBase
     {
         private readonly IFirebaseService _service;
+        private readonly DataContext _context;
 
-        public FirebaseController(IFirebaseService service) : base()
+        public FirebaseController(IFirebaseService service, DataContext context) : base()
         {
             _service = service;
+            _context = context;
         }
 
         [HttpGet("SignInAnonymously")]
@@ -25,16 +27,39 @@ namespace backendTest.Controllers
             return await _service.SignInAnonymously();
         }
 
-        [HttpGet("SignUpWithEmailAndPassword")]
-        public async Task<ActionResult<FirebaseUserToken>> SignUpWithEmailAndPassword(string email, string password)
+        [HttpPost("register")]
+        public async Task<ActionResult> Register(UserRegisterRequest request)
         {
-            return await _service.SignUpWithEmailAndPassword(email, password);
+            if (_context.Users.Any(u => u.Email == request.Email))
+            {
+                return BadRequest("User already exists.");
+            }
+            var res = await _service.SignUpWithEmailAndPassword(request.Email, request.Password);
+
+            var user = new User
+            {
+                Name = request.Name,
+                Email = request.Email,
+                IdToken = res.idToken
+            };
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+
+            return Ok("User successfully created!");
+
         }
 
-        [HttpGet("SignInWithEmailAndPassword")]
-        public async Task<ActionResult<FirebaseUserToken>> SignInWithEmailAndPassword(string email, string password)
+        [HttpPost("login")]
+        public async Task<ActionResult<FirebaseUserToken>> Login(UserLoginRequest request)
         {
-            return await _service.SignInWithEmailAndPassword(email, password);
+            return await _service.SignInWithEmailAndPassword(request.Email, request.Password);
+        }
+
+        [HttpPost("ResetPassword")]
+        public async Task<ActionResult> ResetPasswordByEmail(string email)
+        {
+             await _service.ResetPasswordByEmail(email);
+            return Ok("chek your gmail");
         }
 
         [HttpGet("SignInWithGoogleAccessToken")]

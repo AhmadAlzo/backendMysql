@@ -19,21 +19,23 @@ namespace backendTest.Infrastructure.Services
     /// </summary>
     public interface IFirebaseService
     {
-        /// <summary>
+        
         /// In order to use this method you have to enable Anonymous Sign-in provider 
-        /// </summary>
+        
         Task<FirebaseUserToken> SignInAnonymously();
-        /// <summary>
+        
         /// In order to use this method you have to enable Email/Password Sign-in provider 
-        /// </summary>
+        
         Task<FirebaseUserToken> SignUpWithEmailAndPassword(string email, string password);
-        /// <summary>
+
         /// In order to use this method you have to enable Email/Password Sign-in provider 
-        /// </summary>
+        
         Task<FirebaseUserToken> SignInWithEmailAndPassword(string email, string password);
-        /// <summary>
+
+        /// In order to use this method you can Reset Password By Email 
+        Task ResetPasswordByEmail(string email);
+
         /// In order to use this method you have to enable Google Sign-in provider 
-        /// </summary>
         Task<FirebaseOAuthUserToken> SignInWithGoogleAccessToken(string googleIdToken);
     }
 
@@ -66,7 +68,10 @@ namespace backendTest.Infrastructure.Services
             if (httpResponseMessage.IsSuccessStatusCode == false)
             {
                 var contentError = await JsonSerializer.DeserializeAsync<FirebaseContentError>(contentStream);
-
+                if (contentError == null)
+                {
+                    throw new ArgumentNullException(nameof(contentError));
+                }
                 throw new FirebaseException(contentError);
             }
             
@@ -91,7 +96,10 @@ namespace backendTest.Infrastructure.Services
             if (httpResponseMessage.IsSuccessStatusCode == false)
             {
                 var contentError = await JsonSerializer.DeserializeAsync<FirebaseContentError>(contentStream);
-
+                if (contentError == null)
+                {
+                    throw new ArgumentNullException(nameof(contentError));
+                }
                 throw new FirebaseException(contentError);
             }
  
@@ -116,11 +124,39 @@ namespace backendTest.Infrastructure.Services
             if (httpResponseMessage.IsSuccessStatusCode == false)
             {
                 var contentError = await JsonSerializer.DeserializeAsync<FirebaseContentError>(contentStream);
-
+                if (contentError == null)
+                {
+                    throw new ArgumentNullException(nameof(contentError));
+                }
                 throw new FirebaseException(contentError);
             }
             
             return await JsonSerializer.DeserializeAsync<FirebaseUserToken>(contentStream);
+        }
+
+        public async Task ResetPasswordByEmail(string email)
+        {
+            var content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                { "email", email },
+                { "requestType", "PASSWORD_RESET" }
+            });
+
+            var httpClient = _httpClientFactory.CreateClient();
+
+            var httpResponseMessage = await httpClient.PostAsync($"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={_appSettings.WebAPIKey}", content);
+
+            if (httpResponseMessage.IsSuccessStatusCode == false)
+            {
+                using var contentStream = await httpResponseMessage.Content.ReadAsStreamAsync(); // Declare and initialize contentStream here
+
+                var contentError = await JsonSerializer.DeserializeAsync<FirebaseContentError>(contentStream);
+                if (contentError == null)
+                {
+                    throw new ArgumentNullException(nameof(contentError));
+                }
+                throw new FirebaseException(contentError);
+            }
         }
 
         public async Task<FirebaseOAuthUserToken> SignInWithGoogleAccessToken(string googleAccessToken)
@@ -143,11 +179,14 @@ namespace backendTest.Infrastructure.Services
             if (httpResponseMessage.IsSuccessStatusCode == false)
             {
                 var contentError = await JsonSerializer.DeserializeAsync<FirebaseContentError>(contentStream);
-
+                if (contentError == null)
+                {
+                    throw new ArgumentNullException(nameof(contentError));
+                }
                 throw new FirebaseException(contentError);
             }
 
-            return await JsonSerializer.DeserializeAsync<FirebaseOAuthUserToken>(contentStream);
+            return await JsonSerializer.DeserializeAsync<FirebaseOAuthUserToken>(contentStream)!;
         }
     }
 }
