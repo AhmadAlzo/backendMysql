@@ -1,14 +1,16 @@
-﻿using FirebaseAdmin.Auth;
-using Microsoft.AspNetCore.Mvc;
+﻿using System;
+using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
-
-using backendTest.Infrastructure.Attributes;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using backendTest.Infrastructure.Models;
 using backendTest.Infrastructure.Services;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Google;
-using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Mvc;
 
 namespace backendTest.Controllers
 {
@@ -16,132 +18,206 @@ namespace backendTest.Controllers
     [ApiController]
     public class FirebaseController : ControllerBase
     {
-        private readonly IFirebaseService _service;
+        private readonly IFirebaseService _firebaseService;
         private readonly DataContext _context;
+        private readonly ILogger<FirebaseController> _logger;
 
-        public FirebaseController(IFirebaseService service, DataContext context) : base()
+        public FirebaseController(IFirebaseService firebaseService, DataContext context, ILogger<FirebaseController> logger)
         {
-            _service = service;
+            _firebaseService = firebaseService;
             _context = context;
+            _logger = logger;
         }
 
         [HttpGet("SignInAnonymously")]
         public async Task<ActionResult<FirebaseUserToken>> SignInAnonymously()
         {
-            return await _service.SignInAnonymously();
+            try
+            {
+                var result = await _firebaseService.SignInAnonymously();
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during anonymous sign-in.");
+                return StatusCode(500, "An error occurred during sign-in.");
+            }
         }
 
         [HttpPost("register")]
-        public async Task<ActionResult> Register(UserRegisterRequest request)
+        public async Task<IActionResult> Register([FromBody] UserRegisterRequest request)
         {
-            if (_context.Users.Any(u => u.Email == request.Email))
+            try
             {
-                return BadRequest("User already exists.");
+                // Input validation
+                if (!ModelState.IsValid)
+                {
+                    return BadRequest(ModelState);
+                }
+
+                // Check if the user already exists
+                if (await _context.Users.AnyAsync(u => u.Email == request.Email))
+                {
+                    return Conflict("User already exists.");
+                }
+
+                // Register the user with Firebase
+                var firebaseResult = await _firebaseService.SignUpWithEmailAndPassword(request.Email, request.Password);
+
+                // Create and save user in the database
+                var user = new User
+                {
+                    Name = request.Name,
+                    Email = request.Email,
+                    IdToken = firebaseResult.idToken
+                };
+                _context.Users.Add(user);
+                await _context.SaveChangesAsync();
+
+                return Ok("User successfully created!");
             }
-            var res = await _service.SignUpWithEmailAndPassword(request.Email, request.Password);
-
-            var user = new User
+            catch (Exception ex)
             {
-                Name = request.Name,  
-                Email = request.Email,
-                IdToken = res.idToken
-            };
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
-
-            return Ok("User successfully created!");
-
+                _logger.LogError(ex, "Error during registration.");
+                return StatusCode(500, "An error occurred during registration.");
+            }
         }
 
         [HttpPost("login")]
-        public async Task<ActionResult<FirebaseUserToken>> Login(UserLoginRequest request)
+        public async Task<ActionResult<FirebaseUserToken>> Login([FromBody] UserLoginRequest request)
         {
-            return await _service.SignInWithEmailAndPassword(request.Email, request.Password);
+            try
+            {
+                var result = await _firebaseService.SignInWithEmailAndPassword(request.Email, request.Password);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during login.");
+                return StatusCode(500, "An error occurred during login.");
+            }
         }
 
         [HttpPost("ResetPassword")]
         public async Task<ActionResult> ResetPasswordByEmail(string email)
-        { 
-             await _service.ResetPasswordByEmail(email);
-            return Ok("chek your gmail");
+        {
+            try
+            {
+                await _firebaseService.ResetPasswordByEmail(email);
+                return Ok("Check your email for password reset instructions.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during password reset.");
+                return StatusCode(500, "An error occurred during password reset.");
+            }
         }
 
         [HttpGet("deletacount")]
-        public async Task<ActionResult> Logout(string email,string password)
+        public async Task<ActionResult> DeleteAccount(string email, string password)
         {
-
-            var userToDelete = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
-
-            if (userToDelete != null)
+            try
             {
-                // Remove the user from the firebase
-                await _service.DeleteAccount(email, password);
+                var userToDelete = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
 
-                // Remove the user from the context
-                _context.Users.Remove(userToDelete);
-                await _context.SaveChangesAsync();
+                if (userToDelete != null)
+                {
+                    // Remove the user from Firebase
+                    await _firebaseService.DeleteAccount(email, password);
 
-                return Ok("your acount de");
+                    // Remove the user from the database
+                    _context.Users.Remove(userToDelete);
+                    await _context.SaveChangesAsync();
+
+                    return Ok("Your account has been deleted.");
+                }
+                else
+                {
+                    return NotFound("User not found.");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during account deletion.");
+                return StatusCode(500, "An error occurred during account deletion.");
+            }
+        }
+
+        [HttpGet("google-login")]
+        public IActionResult GoogleLogin()
+        {
+            // Specify the authentication scheme and additional parameters
+            var authenticationProperties = new AuthenticationProperties
+            {
+                RedirectUri = Url.Action(nameof(GoogleLoginCallback)),
+            };
+
+            return Challenge(authenticationProperties, "Google");
+        }
+
+        // Callback endpoint for Google authentication
+        [HttpGet("google-login-callback")]
+        public IActionResult GoogleLoginCallback()
+        {
+            // Check if the authentication was successful
+            if (User.Identity.IsAuthenticated)
+            {
+                // User is authenticated, you can access their information here
+                var userEmail = User.Claims.FirstOrDefault(c => c.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress")?.Value;
+                // Perform any user management or other actions here
+
+                return Ok($"Logged in as {userEmail}");
             }
             else
             {
-                // Handle the case where the user with the specified email is not found.
-                // You can throw an exception or return an appropriate response.
-                // For example:
-                // throw new NotFoundException("User not found");
-                // or
-                return NotFound("User not found");
-
+                // Authentication failed
+                return BadRequest("Google authentication failed");
             }
         }
 
-
-        [HttpGet("SignInWithGoogle")]
-        public async Task GoogleLogin()
+        // Endpoint for logging the user out
+        [Authorize] // Require authentication to access this endpoint
+        [HttpGet("logout")]
+        public IActionResult Logout()
         {
-            await HttpContext.ChallengeAsync(GoogleDefaults.AuthenticationScheme, new AuthenticationProperties()
-            {
-                RedirectUri = Url.Action("GoogleResponse")
-            });
+            // Sign out the user
+            HttpContext.SignOutAsync();
+
+            return Ok("Logged out successfully");
         }
-
-        public async Task GoogleResponse()
-        {
-            var result = await HttpContext.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-            var claims = result.Principal.Identities
-                .FirstOrDefault().Claims.Select(claim => new
-                {
-                    claim.Issuer,
-                    claim.OriginalIssuer,
-                    claim.Type,
-                    claim.Value
-                });
-            
-        }
-
-        [HttpGet("logoutWithGoogle")]
-        public async Task Logout()
-        {
-            await HttpContext.SignOutAsync();
-            
-        }
-
-
 
         [HttpGet("SignInWithGoogleAccessToken")]
         public async Task<ActionResult<FirebaseOAuthUserToken>> SignInWithGoogleAccessToken(string googleIdToken)
         {
-            return await _service.SignInWithGoogleAccessToken(googleIdToken);
+            try
+            {
+                var result = await _firebaseService.SignInWithGoogleAccessToken(googleIdToken);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during Google access token sign-in.");
+                return StatusCode(500, "An error occurred during Google access token sign-in.");
+            }
         }
 
-        /// <summary>
-        /// You have to be authorized in swagger to be able get data from firebase token.
-        /// </summary>
-        [Authorize]
-        [HttpGet("GetDataFromMyToken")]
-        public async Task<ActionResult<FirebaseToken>> GetDataFromFirebaseToken()
-        {
-            return await Task.FromResult((FirebaseToken)HttpContext.Items["user"]);
-        }
+        //[Authorize]
+        //[HttpGet("GetDataFromMyToken")]
+        //public async Task<ActionResult<FirebaseToken>> GetDataFromFirebaseToken()
+        //{
+         //   try
+         //   {
+         //       // Retrieve Firebase data using the user's token
+          //      var userToken = HttpContext.Items["user"] as FirebaseToken;
+         //       // Process data as needed
+
+        //        return Ok(userToken);
+        //    }
+        //    catch (Exception ex)
+         //   {
+          //      _logger.LogError(ex, "Error during data retrieval.");
+        //        return StatusCode(500, "An error occurred during data retrieval.");
+        //    }
+      //  }
     }
 }

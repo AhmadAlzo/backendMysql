@@ -64,21 +64,21 @@ namespace backendMysql
             });
             services.AddHttpClient();
 
-            // configure DI for application services
+            // configure DI for application services    
             services.AddScoped<IFirebaseAdminUtils, FirebaseAdminUtils>();
             services.AddScoped<IFirebaseService, FirebaseService>();
         }
 
-        private AppSettings GetAppSettings()
+        private AppSettings GetAppSettings()  
         {
-            var appSettings = new AppSettings();
+            var appSettings = new AppSettings();  
 
-            Configuration.Bind(nameof(AppSettings), appSettings);
+            Configuration.Bind(nameof(AppSettings), appSettings);  
 
             return appSettings;
         }
 
-        public void Configure(IApplicationBuilder app)
+        public void Configure(IApplicationBuilder app)  
         {
             app.UseSwaggerDocumentation();
           
