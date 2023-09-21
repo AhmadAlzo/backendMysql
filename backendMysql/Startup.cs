@@ -26,7 +26,26 @@ namespace backendMysql
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddCors();
-            
+
+            services.AddAuthentication()
+                .AddGoogle(options =>
+                {
+                    IConfigurationSection googleAuthSection = Configuration.GetSection("Authentication:Google");
+
+                    options.ClientId = googleAuthSection["ClientId"];
+                    options.ClientSecret = googleAuthSection["ClientSecret"];
+                });
+                //.AddFacebook(facebookOptions =>
+               // {
+                //    facebookOptions.AppId = Configuration["Authentication:Facebook:AppId"];
+                //    facebookOptions.AppSecret = Configuration["Authentication:Facebook:AppSecret"];
+               // })
+                //.AddMicrosoftAccount(microsoftOptions =>
+                //{
+                //    microsoftOptions.ClientId = Configuration["Authentication:Microsoft:ClientId"];
+                //    microsoftOptions.ClientSecret = Configuration["Authentication:Microsoft:ClientSecret"];
+                //});
+
             services.AddControllers();
 
             // configure strongly typed settings object
@@ -67,6 +86,9 @@ namespace backendMysql
             app.UseSwaggerUI();
 
             app.UseRouting();
+
+            app.UseAuthentication();
+            app.UseAuthorization();
 
             // global cors policy
             app.UseCors(x => x

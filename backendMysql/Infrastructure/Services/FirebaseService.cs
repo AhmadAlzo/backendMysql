@@ -28,8 +28,12 @@ namespace backendTest.Infrastructure.Services
         
         Task<FirebaseUserToken> SignUpWithEmailAndPassword(string email, string password);
 
-        /// In order to use this method you have to enable Email/Password Sign-in provider 
         
+        /// In order to use this method you have to enable to delet acount
+
+        Task DeleteAccount(string email, string password);
+
+        /// In order to use this method you have to enable Email/Password Sign-in provider
         Task<FirebaseUserToken> SignInWithEmailAndPassword(string email, string password);
 
         /// In order to use this method you can Reset Password By Email 
@@ -157,6 +161,36 @@ namespace backendTest.Infrastructure.Services
                 }
                 throw new FirebaseException(contentError);
             }
+        }
+
+        public async Task DeleteAccount(string email, string password)
+        {
+            // You can use the Firebase Authentication API to delete the user's account.
+            // Here, we'll make a request to Firebase for deleting the account.
+
+            var content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                { "email", email },
+                { "password", password }
+            });
+
+            var httpClient = _httpClientFactory.CreateClient();
+
+            var httpResponseMessage = await httpClient.PostAsync($"https://identitytoolkit.googleapis.com/v1/accounts:delete?key={_appSettings.WebAPIKey}", content);
+
+            if (httpResponseMessage.IsSuccessStatusCode == false)
+            {
+                using var contentStream = await httpResponseMessage.Content.ReadAsStreamAsync();
+
+                var contentError = await JsonSerializer.DeserializeAsync<FirebaseContentError>(contentStream);
+                if (contentError == null)
+                {
+                    throw new ArgumentNullException(nameof(contentError));
+                }
+                throw new FirebaseException(contentError);
+            }
+
+            // If the request is successful, the user account has been deleted.
         }
 
         public async Task<FirebaseOAuthUserToken> SignInWithGoogleAccessToken(string googleAccessToken)
