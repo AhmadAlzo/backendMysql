@@ -39,8 +39,10 @@ namespace backendTest.Infrastructure.Services
         /// In order to use this method you can Reset Password By Email 
         Task ResetPasswordByEmail(string email);
 
-        /// In order to use this method you have to enable Google Sign-in provider 
-        Task<FirebaseOAuthUserToken> SignInWithGoogleAccessToken(string googleIdToken);
+        /// In order to use this method you have to enable Google Sign-in provider but you need to s
+        Task<FirebaseOAuthUserToken> SignInWithGoogleAccessToken(string googleIdToken); 
+
+        Task<FirebaseOAuthUserToken> SignInWithFacebookAccessToken(string facebookAccessToken);
     }
 
     public class FirebaseService : IFirebaseService
@@ -199,6 +201,34 @@ namespace backendTest.Infrastructure.Services
             {
                 { "autoCreate", "true" },
                 { "postBody", $"providerId=google.com&access_token={googleAccessToken}&nonce=nonce" },
+                { "requestUri", "http://localhost" },
+                { "returnIdpCredential", "true" },
+                { "returnSecureToken", "true" }
+            });
+
+            var httpClient = _httpClientFactory.CreateClient();
+
+            var httpResponseMessage = await httpClient.PostAsync($"https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key={_appSettings.WebAPIKey}", content);
+
+            using var contentStream = await httpResponseMessage.Content.ReadAsStreamAsync();
+
+            if (httpResponseMessage.IsSuccessStatusCode == false)
+            {
+                var contentError = await JsonSerializer.DeserializeAsync<FirebaseContentError>(contentStream);
+                if (contentError == null)
+                {
+                    throw new ArgumentNullException(nameof(contentError));
+                }
+                throw new FirebaseException(contentError);
+            }
+
+            return await JsonSerializer.DeserializeAsync<FirebaseOAuthUserToken>(contentStream)!;
+        }
+        public async Task<FirebaseOAuthUserToken> SignInWithFacebookAccessToken(string facebookAccessToken)
+        {
+            var content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                { "postBody", $"access_token={facebookAccessToken}&providerId=facebook.com" },
                 { "requestUri", "http://localhost" },
                 { "returnIdpCredential", "true" },
                 { "returnSecureToken", "true" }

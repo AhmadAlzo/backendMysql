@@ -201,23 +201,37 @@ namespace backendTest.Controllers
             }
         }
 
+        [HttpGet("SignInWithFacebookAccessToken")]
+        public async Task<ActionResult<FirebaseOAuthUserToken>> SignInWithFacebookAccessToken(string facebookAccessToken)
+        {
+            try
+            {
+                var result = await _firebaseService.SignInWithFacebookAccessToken(facebookAccessToken);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during Google access token sign-in.");
+                return StatusCode(500, "An error occurred during Google access token sign-in.");
+            }
+        }
         //[Authorize]
         //[HttpGet("GetDataFromMyToken")]
         //public async Task<ActionResult<FirebaseToken>> GetDataFromFirebaseToken()
         //{
-         //   try
-         //   {
-         //       // Retrieve Firebase data using the user's token
-          //      var userToken = HttpContext.Items["user"] as FirebaseToken;
-         //       // Process data as needed
+        //   try
+        //   {
+        //       // Retrieve Firebase data using the user's token
+        //      var userToken = HttpContext.Items["user"] as FirebaseToken;
+        //       // Process data as needed
 
         //        return Ok(userToken);
         //    }
         //    catch (Exception ex)
-         //   {
-          //      _logger.LogError(ex, "Error during data retrieval.");
+        //   {
+        //      _logger.LogError(ex, "Error during data retrieval.");
         //        return StatusCode(500, "An error occurred during data retrieval.");
         //    }
-      //  }
+        //  }
     }
 }
