@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.IO;
+using System;
 
 using backendTest.Infrastructure.Models;
 using backendTest.Infrastructure.Exceptions;
@@ -43,6 +44,12 @@ namespace backendTest.Infrastructure.Services
         Task<FirebaseOAuthUserToken> SignInWithGoogleAccessToken(string googleIdToken); 
 
         Task<FirebaseOAuthUserToken> SignInWithFacebookAccessToken(string facebookAccessToken);
+
+
+        Task<FirebaseUserToken> SignInWithOTP(string phoneNumber, string otp);
+
+        Task SendOTPCode(string phoneNumber);
+
     }
 
     public class FirebaseService : IFirebaseService
@@ -252,5 +259,53 @@ namespace backendTest.Infrastructure.Services
 
             return await JsonSerializer.DeserializeAsync<FirebaseOAuthUserToken>(contentStream)!;
         }
+        public async Task SendOTPCode(string phoneNumber)
+        {
+          var content = new FormUrlEncodedContent(new Dictionary<string, string>
+         {
+            { "phoneNumber", phoneNumber },
+            { "recaptchaToken", "YOUR_RECAPTCHA_TOKEN" } // You may need to include a reCAPTCHA token for security. Replace with your actual reCAPTCHA token.
+         });
+
+          var httpClient = _httpClientFactory.CreateClient();
+ 
+          var httpResponseMessage = await httpClient.PostAsync($"https://identitytoolkit.googleapis.com/v1/accounts:sendVerificationCode?key={_appSettings.WebAPIKey}", content);
+    
+          if (httpResponseMessage.IsSuccessStatusCode == false)
+          {
+           // Handle the error here, if needed.
+            // You can check the response for specific error details.
+            throw new Exception("Failed to send OTP code.");
+          }
+        }
+        public async Task<FirebaseUserToken> SignInWithOTP(string phoneNumber, string otp)
+        {
+         var content = new FormUrlEncodedContent(new Dictionary<string, string>
+         {
+            { "phoneNumber", phoneNumber },
+            { "code", otp },
+             { "returnSecureToken", "true" }
+         });
+
+         var httpClient = _httpClientFactory.CreateClient();
+
+         var httpResponseMessage = await httpClient.PostAsync($"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPhoneNumber?key={_appSettings.WebAPIKey}", content);
+
+         using var contentStream = await httpResponseMessage.Content.ReadAsStreamAsync();
+
+       if (httpResponseMessage.IsSuccessStatusCode == false)
+        {
+         var contentError = await JsonSerializer.DeserializeAsync<FirebaseContentError>(contentStream);
+        if (contentError == null)
+        {
+            throw new ArgumentNullException(nameof(contentError));
+        }
+        throw new FirebaseException(contentError);
+         }
+
+        return await JsonSerializer.DeserializeAsync<FirebaseUserToken>(contentStream);
+       }
+
+        
     }
 }
