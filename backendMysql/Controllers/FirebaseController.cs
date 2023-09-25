@@ -14,7 +14,7 @@ using backendTest.Infrastructure.Services;
 
 namespace backendTest.Controllers
 {
-    [Route("api/[controller]")]
+    [Route("api/[controller]")]    
     [ApiController]
     public class FirebaseController : ControllerBase
     {
@@ -69,6 +69,7 @@ namespace backendTest.Controllers
                 {
                     Name = request.Name,
                     Email = request.Email,
+                    
                     IdToken = firebaseResult.idToken
                 };
                 _context.Users.Add(user);
@@ -110,6 +111,36 @@ namespace backendTest.Controllers
             {
                 _logger.LogError(ex, "Error during password reset.");
                 return StatusCode(500, "An error occurred during password reset.");
+            }
+        }
+
+        [HttpPost("SignInWithOTP")]
+        public async Task<ActionResult> SignInWithOTP(string number,string otp,string email)
+        {
+            try
+            {
+                 FirebaseUserToken res =await _firebaseService.SignInWithOTP(number,otp);
+                if ()
+                {
+                    var user = _context.Users.FirstOrDefault(u => u.Email == email);
+
+                    if (user != null)
+                    {
+                        // Update user data with new values from the form
+                        user.phoneNumber = number;
+                        // Save changes to the database
+                       // await _context.SaveChanges();
+
+                        // Provide feedback to the user
+                    }
+                    return Ok("sucess");
+                }
+                
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during password reset.");
+                return StatusCode(500, "An error occurred during is not your number");
             }
         }
 
